@@ -42,6 +42,7 @@ defmodule Ash.Resource.Validation do
 
   @callback init(Keyword.t()) :: {:ok, Keyword.t()} | {:error, String.t()}
   @callback validate(Ash.Changeset.t(), Keyword.t()) :: :ok | {:error, term}
+  @callback atomic?(Keyword.t()) :: boolean
 
   @validation_type {:spark_function_behaviour, Ash.Resource.Validation,
                     Ash.Resource.Validation.Builtins, {Ash.Resource.Validation.Function, 1}}
@@ -100,8 +101,9 @@ defmodule Ash.Resource.Validation do
       @behaviour Ash.Resource.Validation
 
       def init(opts), do: {:ok, opts}
+      def atomic?(_), do: false
 
-      defoverridable init: 1
+      defoverridable init: 1, atomic?: 1
     end
   end
 

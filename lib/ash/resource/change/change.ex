@@ -63,6 +63,26 @@ defmodule Ash.Resource.Change do
     ]
   end
 
+  def atomic_schema do
+    schema()
+    |> Keyword.take([:description, :where])
+    |> Keyword.put(:attribute, type: :atom, required: true, doc: "The attribute to update")
+    |> Keyword.put(:expr,
+      type: :any,
+      required: true,
+      doc: """
+      The expression to use to update the attribute
+      """
+    )
+  end
+
+  def transform_atomic(atomic) do
+    %{
+      atomic
+      | change: {Ash.Resource.Change.Atomic, attribute: atomic.attribute, expr: atomic.expr}
+    }
+  end
+
   @doc false
   def action_schema do
     Keyword.delete(schema(), :on)
@@ -104,12 +124,53 @@ defmodule Ash.Resource.Change do
 
   @callback init(Keyword.t()) :: {:ok, Keyword.t()} | {:error, term}
   @callback change(Ash.Changeset.t(), Keyword.t(), context) :: Ash.Changeset.t()
+  @doc """
+  An atomic expression of the provided change.
+
+  To create an atomic, use the `Ash.Atomic.atomic/2` macro, which is automatically required
+  when calling `use Ash.Resource.Change`.
+
+  For example:
+
+  ```elixir
+  def atomic(opts, _context) do
+    Ash.Atomic.atomic(:attribute_name, attribute_name + 42)
+  end
+  ```
+
+  Return values:
+
+  - `:not_atomic`: This change cannot be run atomically. The normal change behavior is skipped and the atomic is used.
+  - `:ignore`: This change is not necessary in an atomic action. The normal change behavior is skipped and the atomic is not used.
+  - `:safe`: This change's `change` function is safe to do atomically. For example, `set_attribute(:foo, 10)` has no need to be atomic.
+  - `{:error, error}`: An error is added to the changeset (preventing the action).
+  - `{:ok, atomic_or_list_of_atomics}`: The provided atomics are added to the changeset using `Ash.Changeset.atomic/2`.
+  """
+  @type after_atomic ::
+          (Ash.Resource.record() -> {:ok, Ash.Resource.record()} | {:error, Ash.Error.t()})
+
+  @callback atomic(Keyword.t(), context) ::
+              :not_atomic
+              | :ignore
+              | :safe
+              | {:ok, Ash.Atomic.t() | [Ash.Atomic.t()], after_atomic() | list(after_atomic())}
+              | {:error, Ash.Error.t()}
+
+  @doc """
+  Replaces `change/3` for batch actions, allowing to optimize changes for bulk actions.
+  """
   @callback batch_change([Ash.Changeset.t()], Keyword.t(), context) ::
               Enumerable.t(Ash.Changeset.t() | Ash.Notifier.Notification.t())
 
+  @doc """
+  Runs on each batch before it is dispatched to the data layer.
+  """
   @callback before_batch([Ash.Changeset.t()], Keyword.t(), context) ::
               Enumerable.t(Ash.Changeset.t() | Ash.Notifier.Notification.t())
 
+  @doc """
+  Runs on each batch result after it is dispatched to the data layer.
+  """
   @callback after_batch(
               [{Ash.Changeset.t(), Ash.Resource.record()}],
               Keyword.t(),
@@ -126,10 +187,12 @@ defmodule Ash.Resource.Change do
   defmacro __using__(_) do
     quote do
       @behaviour Ash.Resource.Change
+      require Ash.Atomic
 
       def init(opts), do: {:ok, opts}
+      def atomic(_opts, _context), do: :not_atomic
 
-      defoverridable init: 1
+      defoverridable init: 1, atomic: 2
     end
   end
 end

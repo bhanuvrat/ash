@@ -2864,11 +2864,21 @@ defmodule Ash.Filter do
     end
   end
 
+  def do_hydrate_refs(%Ref{relationship_path: relationship_path, resource: nil} = ref, context) do
+    do_hydrate_refs(
+      %{ref | resource: Ash.Resource.Info.related(context.resource, relationship_path || [])},
+      context
+    )
+  end
+
   def do_hydrate_refs(
         %Ref{attribute: attribute} = ref,
-        %{aggregates: aggregates, calculations: calculations} = context
+        context
       )
       when is_atom(attribute) or is_binary(attribute) do
+    aggregates = context[:aggregates] || %{}
+    calculations = context[:calculations] || %{}
+
     case related(context, ref.relationship_path) do
       nil ->
         {:error,
@@ -2965,10 +2975,6 @@ defmodule Ash.Filter do
             {:error, "Invalid reference #{inspect(ref)}"}
         end
     end
-  end
-
-  def do_hydrate_refs(%Ref{relationship_path: relationship_path, resource: nil} = ref, context) do
-    {:ok, %{ref | resource: Ash.Resource.Info.related(context.resource, relationship_path)}}
   end
 
   def do_hydrate_refs(%BooleanExpression{left: left, right: right} = expr, context) do

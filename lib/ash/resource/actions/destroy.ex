@@ -9,6 +9,7 @@ defmodule Ash.Resource.Actions.Destroy do
     :error_handler,
     manual: nil,
     manual?: false,
+    atomics: [],
     arguments: [],
     touches_resources: [],
     delay_global_validations?: false,

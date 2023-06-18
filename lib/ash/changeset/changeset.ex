@@ -22,6 +22,7 @@ defmodule Ash.Changeset do
     :timeout,
     filters: %{},
     action_failed?: false,
+    atomics: [],
     after_action: [],
     after_transaction: [],
     arguments: %{},
@@ -738,6 +739,26 @@ defmodule Ash.Changeset do
   end
 
   @doc """
+  Adds an atomic change (or changes) to the changeset
+
+  An atomic can be created with the `Ash.Atomic.atomic/2` macro.
+
+  For example:
+
+  ```elixir
+  atomic = Ash.Atomic.atomic(:full_name, first_name <> " " <> last_name)
+  Ash.Changeset.atomic(changeset, atomic)
+  ```
+  """
+  def atomic(changeset, atomics) when is_list(atomics) do
+    Enum.reduce(atomics, changeset, &atomic(&2, &1))
+  end
+
+  def atomic(changeset, atomic) do
+    %{changeset | atomics: [atomic | changeset.atomics]}
+  end
+
+  @doc """
   Set the result of the action. This will prevent running the underlying datalayer behavior
   """
   @spec set_result(t(), term) :: t()
@@ -1216,6 +1237,28 @@ defmodule Ash.Changeset do
       %{validation: _} = validation, changeset ->
         validate(changeset, validation, tracer, metadata, actor)
     end)
+  end
+
+  @doc false
+  def hydrate_atomic_refs(changeset, actor) do
+    %{
+      changeset
+      | atomics:
+          Enum.map(changeset.atomics, fn atomic ->
+            expr =
+              Ash.Filter.build_filter_from_template(
+                atomic.expr,
+                actor,
+                changeset.arguments,
+                changeset.context
+              )
+
+            {:ok, expr} =
+              Ash.Filter.hydrate_refs(expr, %{resource: changeset.resource, public?: false})
+
+            %{atomic | expr: expr}
+          end)
+    }
   end
 
   @doc false

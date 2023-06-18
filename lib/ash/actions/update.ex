@@ -352,6 +352,8 @@ defmodule Ash.Actions.Update do
                   )
                   |> Ash.Changeset.with_hooks(
                     fn changeset ->
+                      changeset = Ash.Changeset.hydrate_atomic_refs(changeset, actor)
+
                       case Ash.Actions.ManagedRelationships.setup_managed_belongs_to_relationships(
                              changeset,
                              actor,
@@ -409,7 +411,8 @@ defmodule Ash.Actions.Update do
                                       authorize?: authorize?
                                     )
 
-                                  Ash.Changeset.changing_attributes?(changeset) ->
+                                  Ash.Changeset.changing_attributes?(changeset) ||
+                                      !Enum.empty?(changeset.atomics) ->
                                     changeset =
                                       changeset
                                       |> Ash.Changeset.set_defaults(:update, true)
